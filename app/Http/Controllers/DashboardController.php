@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Controllers;
+use App\Models\{Exam,Attempt,User};
+class DashboardController extends Controller { public function index(){ $u=auth()->user(); if($u->isAdmin()) return view('dashboard',compact('u'))->with(['examCount'=>Exam::count(),'userCount'=>User::count(),'attemptCount'=>Attempt::count(),'published'=>Exam::where('is_published',true)->count()]); if($u->isTeacher()) return view('dashboard',compact('u'))->with(['examCount'=>Exam::where('created_by',$u->id)->count(),'userCount'=>User::where('role','student')->count(),'attemptCount'=>Attempt::whereHas('exam',fn($q)=>$q->where('created_by',$u->id))->count(),'published'=>Exam::where('created_by',$u->id)->where('is_published',true)->count()]); return view('dashboard',compact('u'))->with(['examCount'=>Exam::published()->count(),'userCount'=>0,'attemptCount'=>Attempt::where('user_id',$u->id)->count(),'published'=>Exam::published()->count()]); } }
