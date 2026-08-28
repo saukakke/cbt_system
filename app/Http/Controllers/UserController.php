@@ -1,0 +1,4 @@
+<?php
+namespace App\Http\Controllers;
+use App\Models\User; use Illuminate\Http\Request;
+class UserController extends Controller { public function index(){return view('users.index',['users'=>User::latest()->paginate(30)]);} public function store(Request $r){$d=$r->validate(['name'=>'required|string|max:120','email'=>'required|email|unique:users','password'=>'required|min:8','role'=>'required|in:admin,teacher,student']);User::create($d);return back()->with('success','User created.');} public function update(Request $r,User $user){$d=$r->validate(['name'=>'required|string|max:120','role'=>'required|in:admin,teacher,student']);$user->update($d);return back()->with('success','User updated.');} public function destroy(User $user){abort_if($user->id===auth()->id(),422,'You cannot delete your own account.');$user->delete();return back()->with('success','User removed.');} }
