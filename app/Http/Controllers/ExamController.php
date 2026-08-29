@@ -1,4 +1,66 @@
 <?php
+
 namespace App\Http\Controllers;
-use App\Models\{Exam,Question}; use Illuminate\Http\Request;
-class ExamController extends Controller { public function index(){ $u=auth()->user(); $exams=$u->isStudent()?Exam::published()->latest()->paginate(12):($u->isAdmin()?Exam::with('creator')->latest()->paginate(12):Exam::where('created_by',$u->id)->latest()->paginate(12)); return view('exams.index',compact('exams')); } public function create(){return view('exams.form',['exam'=>new Exam]);} public function store(Request $r){$d=$r->validate(['title'=>'required|string|max:180','description'=>'nullable|string','duration_minutes'=>'required|integer|min:1|max:600','starts_at'=>'nullable|date','ends_at'=>'nullable|date|after_or_equal:starts_at']); $d['created_by']=auth()->id();$d['is_published']=$r->boolean('is_published');$exam=Exam::create($d);return redirect()->route('exams.questions.index',$exam)->with('success','Exam created. Add questions before publishing.');} public function edit(Exam $exam){$this->own($exam);return view('exams.form',compact('exam'));} public function update(Request $r,Exam $exam){$this->own($exam);$d=$r->validate(['title'=>'required|string|max:180','description'=>'nullable|string','duration_minutes'=>'required|integer|min:1|max:600','starts_at'=>'nullable|date','ends_at'=>'nullable|date|after_or_equal:starts_at']);$d['is_published']=$r->boolean('is_published');$exam->update($d);return back()->with('success','Exam updated.');} public function destroy(Exam $exam){$this->own($exam);$exam->delete();return redirect()->route('exams.index')->with('success','Exam deleted.');} private function own($exam){if(!auth()->user()->isAdmin()&&$exam->created_by!==auth()->id())abort(403);} }
+
+use App\Models\{Exam, Question};
+use Illuminate\Http\Request;
+
+class ExamController extends Controller
+{
+    public function index()
+    {
+        $u = auth()->user();
+        $exams = $u->isStudent()
+            ? Exam::published()->latest()->paginate(12)
+            : ($u->isAdmin() ? Exam::with('creator')->latest()->paginate(12) : Exam::where('created_by', $u->id)->latest()->paginate(12));
+        return view('exams.index', compact('exams'));
+    }
+
+    public function create(){ return view('exams.form', ['exam' => new Exam]); }
+
+    public function store(Request $r)
+    {
+        $d = $this->validated($r);
+        $d['created_by'] = auth()->id();
+        $d['is_published'] = false;
+        $d['allow_retake'] = false;
+        $d['attempt_limit'] = null;
+        $exam = Exam::create($d);
+        return redirect()->route('exams.questions.index', $exam)->with('success', 'Exam created. Add questions before publishing.');
+    }
+
+    public function edit(Exam $exam){ $this->own($exam); return view('exams.form', compact('exam')); }
+
+    public function update(Request $r, Exam $exam)
+    {
+        $this->own($exam);
+        $d = $this->validated($r);
+        $publish = $r->boolean('is_published');
+        if ($publish && !$exam->questions()->exists()) {
+            return back()->withInput()->withErrors(['is_published' => 'Add at least one question before publishing this exam.']);
+        }
+        $d['is_published'] = $publish;
+        if (auth()->user()->isAdmin()) {
+            $d['allow_retake'] = $r->boolean('allow_retake');
+            $d['attempt_limit'] = $d['allow_retake'] ? ($r->input('attempt_limit') ?: null) : null;
+        } else {
+            $d['allow_retake'] = $exam->allow_retake;
+            $d['attempt_limit'] = $exam->attempt_limit;
+        }
+        $exam->update($d);
+        return back()->with('success', 'Exam updated.');
+    }
+
+    public function destroy(Exam $exam){ $this->own($exam); $exam->delete(); return redirect()->route('exams.index')->with('success', 'Exam deleted.'); }
+
+    private function validated(Request $r): array
+    {
+        return $r->validate([
+            'title'=>'required|string|max:180', 'description'=>'nullable|string',
+            'duration_minutes'=>'required|integer|min:1|max:600', 'starts_at'=>'nullable|date',
+            'ends_at'=>'nullable|date|after_or_equal:starts_at',
+        ]);
+    }
+
+    private function own(Exam $exam){ if(!auth()->user()->isAdmin() && $exam->created_by !== auth()->id()) abort(403); }
+}
