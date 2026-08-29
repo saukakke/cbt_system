@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Exam extends Model
 {
+    use SoftDeletes;
+
     protected $fillable=['title','description','duration_minutes','starts_at','ends_at','is_published','allow_retake','attempt_limit','created_by'];
     protected $casts=['starts_at'=>'datetime','ends_at'=>'datetime','is_published'=>'boolean','allow_retake'=>'boolean','attempt_limit'=>'integer'];
     public function creator(){return $this->belongsTo(User::class,'created_by');}

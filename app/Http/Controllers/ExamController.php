@@ -2,8 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Exam;
+use App\Models\{Exam,Attempt};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ExamController extends Controller
 {
@@ -50,7 +51,15 @@ class ExamController extends Controller
         return back()->with('success', 'Exam updated.');
     }
 
-    public function destroy(Exam $exam){ $this->own($exam); $exam->delete(); return redirect()->route('exams.index')->with('success', 'Exam deleted.'); }
+    public function destroy(Exam $exam)
+    {
+        $this->own($exam);
+        if ($exam->attempts()->withTrashed()->whereIn('status',['submitted','in_progress'])->exists()) {
+            return back()->withErrors(['exam' => 'This exam cannot be deleted because it has recorded attempts. Unpublish it or create a new version instead.']);
+        }
+        $exam->delete();
+        return redirect()->route('exams.index')->with('success', 'Exam deleted.');
+    }
 
     private function validated(Request $r): array
     {

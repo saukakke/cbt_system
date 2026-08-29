@@ -10,7 +10,9 @@ A production-oriented Computer Based Testing platform built with Laravel 12, Bla
 - Question bank with single-choice questions and weighted scoring
 - Timed examinations with server-side deadline enforcement and client countdown
 - Automatic submission at timeout
-- One recorded attempt per student/exam
+- One recorded attempt per student/exam by default, with admin-controlled retakes
+- Attempt duration is fixed when the attempt starts
+- Historical exam, attempt and answer records use soft deletes where applicable
 - Detailed result review and teacher/admin result reporting
 - Responsive, accessible Blade interface
 - MySQL production configuration
@@ -45,7 +47,7 @@ php artisan route:cache
 php artisan view:cache
 php artisan migrate --force
 ```
-Use HTTPS, secure environment secrets, database backups, log rotation and a process supervisor appropriate to your hosting platform.
+Use HTTPS, secure environment secrets, database backups, log rotation and a process supervisor appropriate to your hosting platform. **`SESSION_SECURE_COOKIE=true` must be set in every HTTPS deployment** so the session cookie is marked Secure.
 
 ## Architecture
 `app/Http/Controllers` contains application workflows; `app/Models` contains domain persistence; `app/Http/Middleware/RoleMiddleware.php` enforces role boundaries; migrations define relational integrity; Blade views provide the UI.
@@ -53,7 +55,10 @@ Use HTTPS, secure environment secrets, database backups, log rotation and a proc
 ## Security notes
 - Passwords are hashed by Laravel's `hashed` model cast.
 - Authentication sessions are regenerated on login and invalidated on logout.
+- Login and registration POST routes are throttled to 5 requests per minute.
 - Forms use Laravel CSRF protection.
 - Authorization is enforced in routes and ownership checks.
 - Exam deadlines are checked on the server, not only by JavaScript.
+- Attempt duration is stored at start so later exam edits do not change a live attempt.
+- Exams and questions with recorded attempts cannot be structurally changed in ways that invalidate result history.
 - Submitted answers and scores are persisted transactionally.

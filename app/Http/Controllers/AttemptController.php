@@ -22,7 +22,7 @@ class AttemptController extends Controller
             $completed = Attempt::where('exam_id',$lockedExam->id)->where('user_id',$user->id)->where('status','submitted')->count();
             abort_if($completed > 0 && !$lockedExam->allow_retake,403,'Retakes are not allowed for this examination.');
             abort_if($lockedExam->allow_retake && $lockedExam->attempt_limit !== null && $completed >= $lockedExam->attempt_limit,403,'You have reached the maximum number of attempts.');
-            return Attempt::create(['exam_id'=>$lockedExam->id,'user_id'=>$user->id,'started_at'=>now(),'status'=>'in_progress','total_points'=>$lockedExam->questions()->sum('points')]);
+            return Attempt::create(['exam_id'=>$lockedExam->id,'user_id'=>$user->id,'started_at'=>now(),'status'=>'in_progress','duration_minutes'=>$lockedExam->duration_minutes,'total_points'=>$lockedExam->questions()->sum('points')]);
         });
         return redirect()->route('attempts.show',$attempt);
     }
@@ -50,8 +50,8 @@ class AttemptController extends Controller
         return DB::transaction(function() use($attempt,$answers,$message){
             $attempt = Attempt::whereKey($attempt->id)->lockForUpdate()->firstOrFail();
             if (!$attempt->isActive()) return redirect()->route('results.show',$attempt);
-            $exam=$attempt->exam->load('questions.options'); $score=0;
-            foreach($exam->questions as $q){
+            $exam=$attempt->exam->load('questions.options'); $questions=$exam->questions; $score=0; $totalPoints=$questions->sum('points');
+            foreach($questions as $q){
                 $optionId=$answers[$q->id]??null;
                 $option=$optionId ? $q->options->firstWhere('id',(int)$optionId) : null;
                 $correct=(bool) optional($option)->is_correct;
@@ -59,7 +59,7 @@ class AttemptController extends Controller
                 $attempt->answers()->updateOrCreate(['question_id'=>$q->id],['option_id'=>$option?->id,'is_correct'=>$correct,'points_awarded'=>$points]);
                 $score+=$points;
             }
-            $attempt->update(['score'=>$score,'submitted_at'=>now(),'status'=>'submitted']);
+            $attempt->update(['score'=>$score,'total_points'=>$totalPoints,'submitted_at'=>now(),'status'=>'submitted']);
             return redirect()->route('results.show',$attempt)->with('success',$message);
         });
     }
