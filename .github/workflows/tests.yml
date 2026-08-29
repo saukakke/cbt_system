@@ -1,22 +1,70 @@
 name: tests
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.3', '8.4']
     steps:
       - uses: actions/checkout@v4
       - uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
-          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_sqlite, pdo_mysql
           coverage: none
       - uses: ramsey/composer-install@v3
       - run: cp .env.example .env
       - run: sed -i 's/DB_CONNECTION=mysql/DB_CONNECTION=sqlite/' .env
       - run: sed -i 's#DB_DATABASE=cbt#DB_DATABASE=:memory:#' .env
       - run: php artisan key:generate
+      - run: php artisan migrate:fresh --seed
       - run: php artisan test
+
+  mysql-test:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_DATABASE: cbt_test
+          MYSQL_USER: cbt
+          MYSQL_PASSWORD: cbt
+          MYSQL_ROOT_PASSWORD: root
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -u root -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql
+          coverage: none
+      - uses: ramsey/composer-install@v3
+      - run: cp .env.example .env
+      - run: php artisan key:generate
+      - run: php artisan migrate:fresh --seed
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: cbt_test
+          DB_USERNAME: cbt
+          DB_PASSWORD: cbt
+      - run: php artisan test
+        env:
+          DB_CONNECTION: mysql
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_DATABASE: cbt_test
+          DB_USERNAME: cbt
+          DB_PASSWORD: cbt
