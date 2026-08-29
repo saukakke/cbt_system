@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{Exam, Question};
+use App\Models\Exam;
 use Illuminate\Http\Request;
 
 class ExamController extends Controller
@@ -35,14 +35,13 @@ class ExamController extends Controller
     {
         $this->own($exam);
         $d = $this->validated($r);
-        $publish = $r->boolean('is_published');
-        if ($publish && !$exam->questions()->exists()) {
+        if ($r->boolean('is_published') && !$exam->questions()->exists()) {
             return back()->withInput()->withErrors(['is_published' => 'Add at least one question before publishing this exam.']);
         }
-        $d['is_published'] = $publish;
+        $d['is_published'] = $r->boolean('is_published');
         if (auth()->user()->isAdmin()) {
             $d['allow_retake'] = $r->boolean('allow_retake');
-            $d['attempt_limit'] = $d['allow_retake'] ? ($r->input('attempt_limit') ?: null) : null;
+            $d['attempt_limit'] = $d['allow_retake'] ? $r->input('attempt_limit') : null;
         } else {
             $d['allow_retake'] = $exam->allow_retake;
             $d['attempt_limit'] = $exam->attempt_limit;
@@ -55,11 +54,15 @@ class ExamController extends Controller
 
     private function validated(Request $r): array
     {
-        return $r->validate([
+        $rules = [
             'title'=>'required|string|max:180', 'description'=>'nullable|string',
             'duration_minutes'=>'required|integer|min:1|max:600', 'starts_at'=>'nullable|date',
             'ends_at'=>'nullable|date|after_or_equal:starts_at',
-        ]);
+        ];
+        if (auth()->user()->isAdmin()) {
+            $rules['attempt_limit'] = 'nullable|integer|min:2|max:100';
+        }
+        return $r->validate($rules);
     }
 
     private function own(Exam $exam){ if(!auth()->user()->isAdmin() && $exam->created_by !== auth()->id()) abort(403); }
