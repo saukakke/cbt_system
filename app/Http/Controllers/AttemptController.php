@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\{Exam,Attempt,Answer};
+use App\Models\{Exam,Attempt};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -15,15 +15,14 @@ class AttemptController extends Controller
         abort_unless($exam->isOpen(),403,'This examination is not available.');
         abort_if(!$exam->questions()->exists(),422,'This examination has no questions.');
 
-        $active = Attempt::where('exam_id',$exam->id)->where('user_id',$user->id)->where('status','in_progress')->first();
-        if ($active) return redirect()->route('attempts.show',$active);
-
-        $completed = Attempt::where('exam_id',$exam->id)->where('user_id',$user->id)->where('status','submitted')->count();
-        abort_if($completed > 0 && !$exam->allow_retake,403,'Retakes are not allowed for this examination.');
-        abort_if($exam->allow_retake && $exam->attempt_limit !== null && $completed >= $exam->attempt_limit,403,'You have reached the maximum number of attempts.');
-
-        $attempt = DB::transaction(function() use ($exam,$user) {
-            return Attempt::create(['exam_id'=>$exam->id,'user_id'=>$user->id,'started_at'=>now(),'status'=>'in_progress','total_points'=>$exam->questions()->sum('points')]);
+        $attempt = DB::transaction(function () use ($exam, $user) {
+            $lockedExam = Exam::whereKey($exam->id)->lockForUpdate()->firstOrFail();
+            $active = Attempt::where('exam_id',$lockedExam->id)->where('user_id',$user->id)->where('status','in_progress')->first();
+            if ($active) return $active;
+            $completed = Attempt::where('exam_id',$lockedExam->id)->where('user_id',$user->id)->where('status','submitted')->count();
+            abort_if($completed > 0 && !$lockedExam->allow_retake,403,'Retakes are not allowed for this examination.');
+            abort_if($lockedExam->allow_retake && $lockedExam->attempt_limit !== null && $completed >= $lockedExam->attempt_limit,403,'You have reached the maximum number of attempts.');
+            return Attempt::create(['exam_id'=>$lockedExam->id,'user_id'=>$user->id,'started_at'=>now(),'status'=>'in_progress','total_points'=>$lockedExam->questions()->sum('points')]);
         });
         return redirect()->route('attempts.show',$attempt);
     }
@@ -49,7 +48,7 @@ class AttemptController extends Controller
     private function finish(Attempt $attempt,array $answers,string $message)
     {
         return DB::transaction(function() use($attempt,$answers,$message){
-            $attempt->refresh();
+            $attempt = Attempt::whereKey($attempt->id)->lockForUpdate()->firstOrFail();
             if (!$attempt->isActive()) return redirect()->route('results.show',$attempt);
             $exam=$attempt->exam->load('questions.options'); $score=0;
             foreach($exam->questions as $q){
